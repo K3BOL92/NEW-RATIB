@@ -12,7 +12,8 @@ import './styles.css'
 // ─── Service Worker ─────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env?.BASE_URL || ''}sw.js`).catch(console.error)
+    const swUrl = new URL('./sw.js', window.location.href)
+    navigator.serviceWorker.register(swUrl, { scope: './' }).catch(console.error)
   })
 }
 

@@ -2,18 +2,22 @@ const CACHE_NAME = 'idarat-v4-cache'
 const STATIC_CACHE = 'idarat-static-v4'
 const IMAGE_CACHE = 'idarat-images-v4'
 
+const APP_BASE = new URL('./', self.location.href).pathname
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/styles.css',
-  '/App.jsx',
-  '/manifest.json'
+  './',
+  './index.html',
+  './styles.css',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png'
 ]
 
 // Install: Cache static assets
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(STATIC_CACHE).then((cache) => cache.addAll(STATIC_ASSETS))
+    caches.open(STATIC_CACHE)
+      .then((cache) => cache.addAll(STATIC_ASSETS))
+      .catch(() => undefined)
   )
   self.skipWaiting()
 })
@@ -35,34 +39,45 @@ self.addEventListener('fetch', (e) => {
   const { request } = e
   const url = new URL(request.url)
 
-  // Skip non-GET requests
-  if (request.method !== 'GET') return
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return
 
-  // Strategy 1: Cache First for static assets
-  if (STATIC_ASSETS.includes(url.pathname)) {
+  const isAppRequest = request.mode === 'navigate' || url.pathname === APP_BASE || url.pathname.startsWith(APP_BASE)
+
+  if (isAppRequest && !url.pathname.endsWith('.js') && !url.pathname.endsWith('.css')) {
     e.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request))
+      (async () => {
+        const cache = await caches.open(STATIC_CACHE)
+        const cached = await cache.match(request)
+        const fallback = await cache.match('./index.html')
+
+        try {
+          const response = await fetch(request)
+          if (response && response.ok) cache.put(request, response.clone())
+          return response
+        } catch {
+          return cached || fallback || Response.error()
+        }
+      })()
     )
     return
   }
 
-  // Strategy 2: Network First for API/data (if you add later)
-  // Strategy 3: Stale While Revalidate for images
   if (request.destination === 'image') {
     e.respondWith(
       caches.open(IMAGE_CACHE).then(async (cache) => {
         const cached = await cache.match(request)
-        const fetchPromise = fetch(request).then((response) => {
-          if (response.ok) cache.put(request, response.clone())
-          return response
-        }).catch(() => cached)
+        const fetchPromise = fetch(request)
+          .then((response) => {
+            if (response.ok) cache.put(request, response.clone())
+            return response
+          })
+          .catch(() => cached)
         return cached || fetchPromise
       })
     )
     return
   }
 
-  // Default: Network with cache fallback
   e.respondWith(
     fetch(request).catch(() => caches.match(request))
   )
