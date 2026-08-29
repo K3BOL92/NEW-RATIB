@@ -14,7 +14,11 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
       const registrations = await navigator.serviceWorker.getRegistrations()
-      await Promise.all(registrations.map((reg) => reg.unregister()))
+      for (const reg of registrations) {
+        if (reg.active?.scriptURL.includes('sw.js')) {
+          await reg.unregister()
+        }
+      }
 
       const swUrl = new URL(`./sw.js?v=${Date.now()}`, window.location.href)
       const registration = await navigator.serviceWorker.register(swUrl, {
@@ -27,10 +31,15 @@ if ('serviceWorker' in navigator) {
         if (!installing) return
 
         installing.addEventListener('statechange', () => {
-          if (installing.state === 'activated' && navigator.serviceWorker.controller) {
+          if (installing.state === 'installed' && navigator.serviceWorker.controller) {
+            installing.postMessage({ type: 'SKIP_WAITING' })
             window.location.reload()
           }
         })
+      })
+
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        window.location.reload()
       })
     } catch (error) {
       console.error('Service worker registration failed:', error)
